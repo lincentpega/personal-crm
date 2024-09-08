@@ -11,8 +11,8 @@ type Logger struct {
 }
 
 func New() *Logger {
-	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime)
-	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
+	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 
     return &Logger{
         ErrorLog: errorLog,
