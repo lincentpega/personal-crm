@@ -1,0 +1,7 @@
+BEGIN;
+
+DROP TABLE IF EXISTS job_infos;
+DROP TABLE IF EXISTS contact_infos;
+DROP TABLE IF EXISTS persons;
+
+COMMIT;
