@@ -1,6 +1,10 @@
 package main
 
 import (
+	"context"
+	"os/signal"
+	"syscall"
+
 	_ "github.com/lib/pq"
 	"github.com/lincentpega/personal-crm/internal/config"
 	"github.com/lincentpega/personal-crm/internal/db"
@@ -16,8 +20,9 @@ func main() {
     if err != nil {
         log.ErrorLog.Fatal(err)
     }
+    defer database.Close()
 
-    err = db.ExecMigrations(database)
+    err = db.ExecMigrations(database, log)
     if err != nil {
         log.ErrorLog.Fatal(err)
     }
@@ -33,5 +38,12 @@ func main() {
     }
 
 	log.InfoLog.Printf("Starting bot %s", name)
-    b.start()
+    go b.start()
+
+    ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+    defer cancel()
+    <-ctx.Done()
+
+    log.InfoLog.Println("Shutting down bot")
+    b.Stop()
 }
