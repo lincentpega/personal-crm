@@ -14,6 +14,7 @@ type Person struct {
 	SecondName   *string
 	ContactInfos []ContactInfo
 	JobInfos     []JobInfo
+	Settings     Settings
 	ID           int
 }
 
@@ -28,15 +29,19 @@ type JobInfo struct {
 	Current  bool
 }
 
-type PersonModel struct {
+type Settings struct {
+	BirthdayNotify bool
+}
+
+type PersonRepository struct {
 	DB *sql.DB
 }
 
-func NewPersonModel(db *sql.DB) *PersonModel {
-    return &PersonModel{DB: db}
+func NewRepository(db *sql.DB) *PersonRepository {
+	return &PersonRepository{DB: db}
 }
 
-func (m *PersonModel) Get(ctx context.Context, id int) (*Person, error) {
+func (m *PersonRepository) Get(ctx context.Context, id int) (*Person, error) {
 	var p Person
 
 	if err := m.fetchPerson(ctx, id, &p); err != nil {
@@ -51,70 +56,14 @@ func (m *PersonModel) Get(ctx context.Context, id int) (*Person, error) {
 		return nil, err
 	}
 
+	if err := m.fetchPersonSettings(ctx, id, &p); err != nil {
+		return nil, err
+	}
+
 	return &p, nil
 }
 
-func (m *PersonModel) fetchPerson(ctx context.Context, id int, p *Person) error {
-	const personStmt = `SELECT id, first_name, last_name, second_name, birth_date
-                        FROM persons
-                        WHERE id = $1`
-
-	err := m.DB.QueryRowContext(ctx, personStmt, id).Scan(&p.ID, &p.FirstName, &p.LastName, &p.SecondName, &p.BirthDate)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrRecordNotFound
-		}
-		return err
-	}
-
-	return nil
-}
-
-func (m *PersonModel) fetchContactInfos(ctx context.Context, id int, p *Person) error {
-	const contactStmt = `SELECT method_name, contact_data
-                         FROM contact_infos
-                         WHERE person_id = $1`
-
-	rows, err := m.DB.QueryContext(ctx, contactStmt, id)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var c ContactInfo
-		if err := rows.Scan(&c.Method, &c.Data); err != nil {
-			return err
-		}
-		p.ContactInfos = append(p.ContactInfos, c)
-	}
-
-	return rows.Err()
-}
-
-func (m *PersonModel) fetchJobInfos(ctx context.Context, id int, p *Person) error {
-	const jobStmt = `SELECT company, job_position, is_current
-                     FROM job_infos
-                     WHERE person_id = $1`
-
-	rows, err := m.DB.QueryContext(ctx, jobStmt, id)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var j JobInfo
-		if err := rows.Scan(&j.Company, &j.Position, &j.Current); err != nil {
-			return err
-		}
-		p.JobInfos = append(p.JobInfos, j)
-	}
-
-	return rows.Err()
-}
-
-func (m *PersonModel) Insert(ctx context.Context, p *Person) error {
+func (m *PersonRepository) Insert(ctx context.Context, p *Person) error {
 	tx, err := m.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return err
@@ -133,6 +82,10 @@ func (m *PersonModel) Insert(ctx context.Context, p *Person) error {
 		return err
 	}
 
+	if err := m.insertSettings(ctx, tx, p); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -140,11 +93,72 @@ func (m *PersonModel) Insert(ctx context.Context, p *Person) error {
 	return nil
 }
 
-func (m *PersonModel) insertPerson(ctx context.Context, tx *sql.Tx, p *Person) error {
-	const personStmt = `INSERT INTO persons (id, first_name, last_name, second_name, birth_date)
-                        VALUES($1, $2, $3, $4, $5)`
+func (m *PersonRepository) fetchPerson(ctx context.Context, id int, p *Person) error {
+	const stmt = `SELECT id, first_name, last_name, second_name, birth_date 
+        FROM persons 
+        WHERE id = $1`
 
-	_, err := tx.ExecContext(ctx, personStmt, p.ID, p.FirstName, p.LastName, p.SecondName, p.BirthDate)
+	err := m.DB.QueryRowContext(ctx, stmt, id).Scan(&p.ID, &p.FirstName, &p.LastName, &p.SecondName, &p.BirthDate)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrRecordNotFound
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (m *PersonRepository) fetchContactInfos(ctx context.Context, id int, p *Person) error {
+	const stmt = `SELECT method_name, contact_data 
+        FROM contact_infos 
+        WHERE person_id = $1`
+
+	rows, err := m.DB.QueryContext(ctx, stmt, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var c ContactInfo
+		if err := rows.Scan(&c.Method, &c.Data); err != nil {
+			return err
+		}
+		p.ContactInfos = append(p.ContactInfos, c)
+	}
+
+	return rows.Err()
+}
+
+func (m *PersonRepository) fetchJobInfos(ctx context.Context, id int, p *Person) error {
+	const stmt = `SELECT company, job_position, is_current 
+        FROM job_infos 
+        WHERE person_id = $1`
+
+	rows, err := m.DB.QueryContext(ctx, stmt, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var j JobInfo
+		if err := rows.Scan(&j.Company, &j.Position, &j.Current); err != nil {
+			return err
+		}
+		p.JobInfos = append(p.JobInfos, j)
+	}
+
+	return rows.Err()
+}
+
+func (m *PersonRepository) fetchPersonSettings(ctx context.Context, id int, p *Person) error {
+	const stmt = `SELECT birthday_notify
+        FROM person_settings
+        WHERE person_id = $1`
+
+	err := m.DB.QueryRowContext(ctx, stmt, id).Scan(&p.Settings.BirthdayNotify)
 	if err != nil {
 		return err
 	}
@@ -152,12 +166,24 @@ func (m *PersonModel) insertPerson(ctx context.Context, tx *sql.Tx, p *Person) e
 	return nil
 }
 
-func (m *PersonModel) insertContactInfos(ctx context.Context, tx *sql.Tx, p *Person) error {
-	const contactStmt = `INSERT INTO contact_infos (person_id, method_name, contact_data)
-                         VALUES($1, $2, $3)`
+func (m *PersonRepository) insertPerson(ctx context.Context, tx *sql.Tx, p *Person) error {
+	const stmt = `INSERT INTO persons (id, first_name, last_name, second_name, birth_date)
+        VALUES($1, $2, $3, $4, $5)`
+
+	_, err := tx.ExecContext(ctx, stmt, p.ID, p.FirstName, p.LastName, p.SecondName, p.BirthDate)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *PersonRepository) insertContactInfos(ctx context.Context, tx *sql.Tx, p *Person) error {
+	const stmt = `INSERT INTO contact_infos (person_id, method_name, contact_data) 
+        VALUES($1, $2, $3)`
 
 	for _, c := range p.ContactInfos {
-		_, err := tx.ExecContext(ctx, contactStmt, p.ID, c.Method, c.Data)
+		_, err := tx.ExecContext(ctx, stmt, p.ID, c.Method, c.Data)
 		if err != nil {
 			return err
 		}
@@ -166,15 +192,27 @@ func (m *PersonModel) insertContactInfos(ctx context.Context, tx *sql.Tx, p *Per
 	return nil
 }
 
-func (m *PersonModel) insertJobInfos(ctx context.Context, tx *sql.Tx, p *Person) error {
-	const jobStmt = `INSERT INTO job_infos (person_id, company, job_position, is_current)
-                     VALUES($1, $2, $3, $4)`
+func (m *PersonRepository) insertJobInfos(ctx context.Context, tx *sql.Tx, p *Person) error {
+	const stmt = `INSERT INTO job_infos (person_id, company, job_position, is_current) 
+        VALUES($1, $2, $3, $4)`
 
 	for _, j := range p.JobInfos {
-		_, err := tx.ExecContext(ctx, jobStmt, p.ID, j.Company, j.Position, j.Current)
+		_, err := tx.ExecContext(ctx, stmt, p.ID, j.Company, j.Position, j.Current)
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (m *PersonRepository) insertSettings(ctx context.Context, tx *sql.Tx, p *Person) error {
+	const stmt = `INSERT INTO person_settings (person_id, birthday_notify)
+        VALUES($1, $2)`
+
+	_, err := tx.ExecContext(ctx, stmt, p.ID, p.Settings.BirthdayNotify)
+	if err != nil {
+		return err
 	}
 
 	return nil

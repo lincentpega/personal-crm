@@ -26,4 +26,22 @@ CREATE TABLE IF NOT EXISTS public.job_infos (
     FOREIGN KEY (person_id) REFERENCES persons (id)
 );
 
+CREATE TABLE IF NOT EXISTS public.person_settings (
+    person_id INT NOT NULL,
+    birthday_notify BOOLEAN NOT NULL,
+    CONSTRAINT fk_person_settings_persons
+    FOREIGN KEY (person_id) REFERENCES persons (id)
+);
+
+CREATE TYPE notification_type AS ENUM ('keep_in_touch');
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+    person_id INT NOT NULL,
+    type notification_type,
+    notification_time TIMESTAMP,
+    description TEXT,
+    CONSTRAINT fk_notifications_persons
+    FOREIGN KEY (person_id) REFERENCES persons (id)
+);
+
 COMMIT;
