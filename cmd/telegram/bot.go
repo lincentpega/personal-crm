@@ -5,7 +5,6 @@ import (
 
 	"github.com/lincentpega/personal-crm/internal/log"
 	tele "gopkg.in/telebot.v3"
-	"gopkg.in/telebot.v3/middleware"
 )
 
 type bot struct {
@@ -38,7 +37,6 @@ func (b *bot) name() (string, error) {
 
 func (b *bot) route() {
     base := b.Group()
-    base.Use(middleware.Logger(b.log.InfoLog))
 
     base.Handle("/hello", func(ctx tele.Context) error {
         return ctx.Send("Hello, world!")
