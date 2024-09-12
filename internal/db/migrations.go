@@ -2,6 +2,8 @@ package db
 
 import (
 	"database/sql"
+	"path/filepath"
+	"runtime"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -10,8 +12,7 @@ import (
 )
 
 const (
-	migrationsPath = "file://db/migrations"
-	dbName         = "postgres"
+	dbName = "postgres"
 )
 
 func ExecMigrations(db *sql.DB, log *log.Logger) error {
@@ -20,19 +21,26 @@ func ExecMigrations(db *sql.DB, log *log.Logger) error {
 		return err
 	}
 
-	m, err := migrate.NewWithDatabaseInstance(migrationsPath, dbName, driver)
+	m, err := migrate.NewWithDatabaseInstance(getMigrationsSourceURL(), dbName, driver)
 	if err != nil {
 		return err
 	}
-    defer m.Close()
 
 	if err = m.Up(); err != nil {
-        if err == migrate.ErrNoChange {
-            log.InfoLog.Println("No migrations to apply")
-            return nil
-        }
+		if err == migrate.ErrNoChange {
+			log.InfoLog.Println("No migrations to apply")
+			return nil
+		}
 		return err
 	}
 
 	return nil
+}
+
+func getMigrationsSourceURL() string {
+	_, filename, _, _ := runtime.Caller(0)
+	projectRoot := filepath.Join(filepath.Dir(filename), "..", "..")
+	migrationsPath := filepath.Join(projectRoot, "db", "migrations")
+
+	return "file://" + migrationsPath
 }

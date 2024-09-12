@@ -9,41 +9,50 @@ import (
 	"github.com/lincentpega/personal-crm/internal/config"
 	"github.com/lincentpega/personal-crm/internal/db"
 	"github.com/lincentpega/personal-crm/internal/log"
+	"github.com/lincentpega/personal-crm/internal/models/notifications"
+	"github.com/lincentpega/personal-crm/internal/models/person"
+	"github.com/lincentpega/personal-crm/internal/services"
 )
 
-
 func main() {
-    config := config.Load()
+	config := config.Load()
 	log := log.New()
 
-    database, err := db.Connect(config.DSN)
-    if err != nil {
-        log.ErrorLog.Fatal(err)
-    }
-    defer database.Close()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
-    err = db.ExecMigrations(database, log)
-    if err != nil {
-        log.ErrorLog.Fatal(err)
-    }
+	database, err := db.Connect(config.DSN)
+	if err != nil {
+		log.ErrorLog.Fatal(err)
+	}
+	defer database.Close()
 
-    b, err := newBot(config.Token, log)
-    if err != nil {
-        log.ErrorLog.Fatal(err)
-    }
+	err = db.ExecMigrations(database, log)
+	if err != nil {
+		log.ErrorLog.Fatal(err)
+	}
 
-    name, err := b.name()
-    if err != nil {
-        name = ""
-    }
+	notificaitonRepo := notifications.NewRepository(database)
+	personRepo := person.NewRepository(database)
 
-	log.InfoLog.Printf("Starting bot %s", name)
-    go b.start()
+	b, err := newBot(config.Token, log, personRepo, notificaitonRepo)
+	if err != nil {
+		log.ErrorLog.Fatal(err)
+	}
 
-    ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-    defer cancel()
-    <-ctx.Done()
+	notificationService := services.NewNotificationService(b.Bot, notificaitonRepo, personRepo, log, config)
 
-    log.InfoLog.Println("Shutting down bot")
-    b.Stop()
+	startApplication(ctx, b, notificationService)
+
+	<-ctx.Done()
+
+	log.InfoLog.Println("Shutting down bot")
+	b.Stop()
+}
+
+func startApplication(ctx context.Context, b *bot, ns *services.NotificationService) {
+	b.route()
+	b.logStart()
+	go b.Start()
+	go ns.ProcessNotifications(ctx)
 }
