@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/lincentpega/personal-crm/internal/common/txcontext"
-	"github.com/lincentpega/personal-crm/internal/db"
 	"github.com/lincentpega/personal-crm/internal/models"
 )
 
@@ -18,7 +17,13 @@ func NewRepository(db *sql.DB) *NotificationRepository {
 	return &NotificationRepository{db: db}
 }
 
-func (r *NotificationRepository) getDB(ctx context.Context) db.DB {
+type DB interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func (r *NotificationRepository) getDB(ctx context.Context) DB {
 	if tx, ok := txcontext.GetTx(ctx); ok {
 		return tx
 	}
@@ -52,7 +57,7 @@ func (r *NotificationRepository) UpdateNotificationStatus(ctx context.Context, n
 func (r *NotificationRepository) Get(ctx context.Context, id int) (*Notification, error) {
 	const stmt = `SELECT id, person_id, type, status, notification_time, description
 	FROM notifications
-	WHERE person_id = $1`
+	WHERE id = $1`
 
 	var n Notification
 

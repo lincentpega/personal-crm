@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/lincentpega/personal-crm/internal/common/txcontext"
-	"github.com/lincentpega/personal-crm/internal/db"
 	"github.com/lincentpega/personal-crm/internal/models"
 )
 
@@ -18,7 +17,13 @@ func NewRepository(db *sql.DB) *PersonRepository {
 	return &PersonRepository{db: db}
 }
 
-func (m *PersonRepository) getDB(ctx context.Context) db.DB {
+type DB interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func (m *PersonRepository) getDB(ctx context.Context) DB {
 	if tx, ok := txcontext.GetTx(ctx); ok {
 		return tx
 	}
