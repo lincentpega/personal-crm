@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/lincentpega/personal-crm/internal/log"
@@ -53,7 +54,7 @@ func (b *bot) route() {
 			context.Background(),
 			&person.Person{
 				FirstName: firstName,
-				LastName:  &lastName,
+				LastName:  sql.NullString{String: lastName, Valid: true},
 			})
 		if err != nil {
 			return err
@@ -67,7 +68,7 @@ func (b *bot) route() {
 			context.Background(),
 			&notifications.Notification{
 				PersonID:         2,
-				NotificationTime: &now,
+				NotificationTime: now,
 				Status:           notifications.Pending,
 				Type:             notifications.KeepInTouch,
 			})

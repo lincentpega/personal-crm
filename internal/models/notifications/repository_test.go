@@ -1,6 +1,7 @@
 package notifications
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 	"time"
@@ -9,6 +10,15 @@ import (
 	"github.com/lincentpega/personal-crm/internal/models/person"
 	"github.com/lincentpega/personal-crm/internal/test"
 	"github.com/stretchr/testify/suite"
+)
+
+const (
+	testPersonFirstName  = "John"
+	testPersonLastName   = "Smith"
+	testPersonBirthDate  = "2000-01-01"
+	testNotifType        = KeepInTouch
+	testNotifStatus      = Pending
+	testNotifDescription = "Keep in touch with John Smith"
 )
 
 type notificationRepoTestSuite struct {
@@ -36,76 +46,142 @@ func (suite *notificationRepoTestSuite) TearDownTest() {
 }
 
 func (suite *notificationRepoTestSuite) TestGet() {
-	personFirstName := "John"
-	personLastName := "Smith"
-	personBirthDate := "2000-01-01"
-
 	ctx := txcontext.WithTx(suite.Ctx, suite.tx)
 
-	var personID int
-	stmt := `INSERT INTO persons (first_name, last_name, birth_date) 
-	VALUES ($1, $2, $3) RETURNING id`
-	err := suite.tx.QueryRowContext(ctx, stmt, personFirstName, personLastName, personBirthDate).Scan(&personID)
-	suite.NoError(err)
+	person := suite.createTestPerson(ctx)
 
-	notifType := KeepInTouch
-	notifStatus := Pending
 	notifTime := time.Now().Add(24 * time.Hour).UTC()
-	notifDescription := "Keep in touch with John Smith"
 
 	var notifID int
-	stmt = `INSERT INTO notifications (person_id, type, status, notification_time, description) 
+	stmt := `INSERT INTO notifications (person_id, type, status, notification_time, description) 
 	VALUES ($1, $2, $3, $4, $5) RETURNING id`
-	err = suite.tx.QueryRowContext(ctx, stmt, personID, notifType, notifStatus, notifTime, notifDescription).Scan(&notifID)
+	err := suite.tx.QueryRowContext(ctx, stmt, person.ID, testNotifType, testNotifStatus, notifTime, testNotifDescription).Scan(&notifID)
 	suite.NoError(err)
 
 	notification, err := suite.notifRepo.Get(ctx, notifID)
 	suite.NoError(err)
 	suite.Equal(notifID, notification.ID)
-	suite.Equal(personID, notification.PersonID)
-	suite.Equal(notifType, notification.Type)
-	suite.Equal(notifStatus, notification.Status)
+	suite.Equal(person.ID, notification.PersonID)
+	suite.Equal(testNotifType, notification.Type)
+	suite.Equal(testNotifStatus, notification.Status)
 	suite.Equal(notifTime.UTC(), notification.NotificationTime.UTC())
-	suite.Equal(notifDescription, notification.Description)
+	suite.Equal(testNotifDescription, notification.Description)
 }
 
 func (suite *notificationRepoTestSuite) TestInsert() {
 	ctx := txcontext.WithTx(suite.Ctx, suite.tx)
-	pLastName := "Smith"
-	pBirthDate := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	person := person.Person{
-		FirstName: "John",
-		LastName:  &pLastName,
-		BirthDate: &pBirthDate,
-	}
 
-	err := suite.personRepo.Insert(ctx, &person)
-	suite.Require().NoError(err)
-	suite.Require().NotZero(person.ID)
+	person := suite.createTestPerson(ctx)
 
 	notifTime := time.Now().Add(time.Hour * 24).UTC()
-	notifType := KeepInTouch
-	notifStatus := Pending
-	notifDescription := "Keep in touch with John Smith"
 	notif := Notification{
 		PersonID:         person.ID,
-		Type:             notifType,
-		Status:           notifStatus,
-		NotificationTime: &notifTime,
-		Description:      notifDescription,
+		Type:             testNotifType,
+		Status:           testNotifStatus,
+		NotificationTime: notifTime,
+		Description:      testNotifDescription,
 	}
 
-	err = suite.notifRepo.Insert(ctx, &notif)
+	err := suite.notifRepo.Insert(ctx, &notif)
 	suite.Require().NoError(err)
 	suite.Require().NotZero(notif.ID)
 
 	insertedNotif, err := suite.notifRepo.Get(ctx, notif.ID)
 	suite.Require().NoError(err)
 	suite.Require().Equal(person.ID, insertedNotif.PersonID)
-	suite.Require().Equal(notifType, insertedNotif.Type)
-	suite.Require().Equal(notifStatus, insertedNotif.Status)
+	suite.Require().Equal(testNotifType, insertedNotif.Type)
+	suite.Require().Equal(testNotifStatus, insertedNotif.Status)
 	suite.Require().Equal(notifTime.UTC(), insertedNotif.NotificationTime.UTC())
-	suite.Require().Equal(notifDescription, insertedNotif.Description)
+	suite.Require().Equal(testNotifDescription, insertedNotif.Description)
+}
+
+func (suite *notificationRepoTestSuite) TestUpdateNotificationStatus() {
+	ctx := txcontext.WithTx(suite.Ctx, suite.tx)
+
+	person := suite.createTestPerson(ctx)
+
+	notifTime := time.Now().Add(time.Hour * 24).UTC()
+	notif := Notification{
+		PersonID:         person.ID,
+		Type:             testNotifType,
+		Status:           Pending,
+		NotificationTime: notifTime,
+		Description:      testNotifDescription,
+	}
+
+	err := suite.notifRepo.Insert(ctx, &notif)
+	suite.Require().NoError(err)
+
+	err = suite.notifRepo.UpdateNotificationStatus(ctx, notif.ID, Failed)
+	suite.Require().NoError(err)
+
+	updatedNotif, err := suite.notifRepo.Get(ctx, notif.ID)
+	suite.Require().NoError(err)
+	suite.Require().Equal(Failed, updatedNotif.Status)
+}
+
+func (suite *notificationRepoTestSuite) TestGetAwaitingSend() {
+	ctx := txcontext.WithTx(suite.Ctx, suite.tx)
+
+	person := suite.createTestPerson(ctx)
+
+	notifTime := time.Now().Add(-time.Hour * 24).UTC()
+	shouldGetNotif := Notification{
+		PersonID:         person.ID,
+		Type:             testNotifType,
+		Status:           Pending,
+		NotificationTime: notifTime,
+		Description:      testNotifDescription,
+	}
+
+	notifTime = time.Now().Add(time.Hour * 24).UTC()
+	earlyNotif := Notification{
+		PersonID:         person.ID,
+		Type:             testNotifType,
+		Status:           Pending,
+		NotificationTime: notifTime,
+		Description:      testNotifDescription,
+	}
+
+	notifTime = time.Now().Add(-time.Hour * 24).UTC()
+	failedNotif := Notification{
+		PersonID:         person.ID,
+		Type:             testNotifType,
+		Status:           Failed,
+		NotificationTime: notifTime,
+		Description:      testNotifDescription,
+	}
+
+	err := suite.notifRepo.Insert(ctx, &shouldGetNotif)
+	suite.Require().NoError(err)
+
+	err = suite.notifRepo.Insert(ctx, &earlyNotif)
+	suite.Require().NoError(err)
+
+	err = suite.notifRepo.Insert(ctx, &failedNotif)
+	suite.Require().NoError(err)
+
+	notifs, err := suite.notifRepo.GetAwaitingSend(ctx)
+	suite.Require().NoError(err)
+	suite.Require().Equal(1, len(notifs))
+	suite.Require().Equal(shouldGetNotif.ID, notifs[0].ID)
+}
+
+func (suite *notificationRepoTestSuite) createTestPerson(ctx context.Context) *person.Person {
+	pBirthDate, err := time.Parse("2006-01-02", testPersonBirthDate)
+	suite.Require().NoError(err)
+
+	person := &person.Person{
+		FirstName: testPersonFirstName,
+		LastName:  sql.NullString{String: testPersonLastName, Valid: true},
+		BirthDate: sql.NullTime{Time: pBirthDate, Valid: true},
+	}
+
+	err = suite.personRepo.Insert(ctx, person)
+	suite.Require().NoError(err)
+	suite.Require().NotZero(person.ID)
+
+	return person
 }
 
 func TestNotificationRepoTestSuite(t *testing.T) {

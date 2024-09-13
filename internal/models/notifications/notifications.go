@@ -1,6 +1,8 @@
 package notifications
 
-import "time"
+import (
+	"time"
+)
 
 type Type string
 
@@ -17,7 +19,7 @@ const (
 )
 
 type Notification struct {
-	NotificationTime *time.Time
+	NotificationTime time.Time
 	Description      string
 	Type             Type
 	Status           Status

@@ -72,7 +72,14 @@ func (s *NotificationService) processKeepInTouch(ctx context.Context, n *notific
 		return
 	}
 
-	msg := fmt.Sprintf("It's time to contact with %s %s", person.FirstName, *person.LastName)
+	var lastName string
+	if person.LastName.Valid {
+		lastName = person.LastName.String
+	} else {
+		lastName = ""
+	}
+
+	msg := fmt.Sprintf("It's time to contact with %s %s", person.FirstName, lastName)
 	_, err = s.bot.Send(telebot.ChatID(s.config.UserID), msg)
 	if err != nil {
 		s.failNotification(ctx, n)

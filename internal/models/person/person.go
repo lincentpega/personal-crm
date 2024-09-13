@@ -1,14 +1,14 @@
 package person
 
 import (
-	"time"
+	"database/sql"
 )
 
 type Person struct {
-	BirthDate    *time.Time
+	BirthDate    sql.NullTime
 	FirstName    string
-	LastName     *string
-	SecondName   *string
+	LastName     sql.NullString
+	SecondName   sql.NullString
 	ContactInfos []ContactInfo
 	JobInfos     []JobInfo
 	Settings     Settings

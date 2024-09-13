@@ -30,7 +30,7 @@ func (r *NotificationRepository) Insert(ctx context.Context, n *Notification) er
 	VALUES($1, $2, $3, $4, $5)
 	RETURNING id`
 
-	err := r.getDB(ctx).QueryRowContext(ctx, stmt, n.PersonID, n.Type, n.Status, n.NotificationTime.UTC(), n.Description).Scan(&n.ID)
+	err := r.getDB(ctx).QueryRowContext(ctx, stmt, n.PersonID, n.Type, n.Status, n.NotificationTime, n.Description).Scan(&n.ID)
 	if err != nil {
 		return err
 	}
