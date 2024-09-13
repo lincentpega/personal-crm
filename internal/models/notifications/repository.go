@@ -27,9 +27,10 @@ func (r *NotificationRepository) getDB(ctx context.Context) db.DB {
 
 func (r *NotificationRepository) Insert(ctx context.Context, n *Notification) error {
 	const stmt = `INSERT INTO notifications (person_id, type, status, notification_time, description)
-	VALUES($1, $2, $3, $4, $5)`
+	VALUES($1, $2, $3, $4, $5)
+	RETURNING id`
 
-	_, err := r.getDB(ctx).ExecContext(ctx, stmt, n.PersonID, n.Type, n.Status, n.NotificationTime, n.Description)
+	err := r.getDB(ctx).QueryRowContext(ctx, stmt, n.PersonID, n.Type, n.Status, n.NotificationTime.UTC(), n.Description).Scan(&n.ID)
 	if err != nil {
 		return err
 	}

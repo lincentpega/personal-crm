@@ -1,79 +1,30 @@
 package person
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/lincentpega/personal-crm/internal/common/txcontext"
-	database "github.com/lincentpega/personal-crm/internal/db"
-	"github.com/lincentpega/personal-crm/internal/log"
+	"github.com/lincentpega/personal-crm/internal/test"
 	"github.com/stretchr/testify/suite"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 type personRepoTestSuite struct {
-	suite.Suite
-	db          *sql.DB
-	pgContainer *postgres.PostgresContainer
-	ctx         context.Context
-	repo        *PersonRepository
-	log         *log.Logger
-	tx          *sql.Tx
+	test.TestSuite
+	repo *PersonRepository
+	tx   *sql.Tx
 }
 
 func (suite *personRepoTestSuite) SetupSuite() {
-	suite.ctx = context.Background()
-	suite.log = log.New()
+	suite.TestSuite.SetupSuite()
 
-	pgContainer, err := postgres.Run(suite.ctx,
-		"postgres:16.4-alpine",
-		postgres.WithDatabase("test-db"),
-		postgres.WithUsername("postgres"),
-		postgres.WithPassword("postgres"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
-	if err != nil {
-		suite.log.ErrorLog.Fatal(err)
-	}
-
-	suite.pgContainer = pgContainer
-
-	connStr, err := pgContainer.ConnectionString(suite.ctx, "sslmode=disable")
-	if err != nil {
-		suite.log.ErrorLog.Fatal(err)
-	}
-
-	db, err := database.Connect(connStr)
-	if err != nil {
-		suite.log.ErrorLog.Fatal(err)
-	}
-
-	suite.db = db
-
-	if err := database.ExecMigrations(suite.db, suite.log); err != nil {
-		suite.log.ErrorLog.Fatal(err)
-	}
-
-	repo := NewRepository(db)
-
-	suite.repo = repo
-}
-
-func (suite *personRepoTestSuite) TearDownSuite() {
-	if err := suite.pgContainer.Terminate(suite.ctx); err != nil {
-		suite.log.ErrorLog.Fatalf("error terminating postgres container: %s", err)
-	}
+	suite.repo = NewRepository(suite.DB)
 }
 
 func (suite *personRepoTestSuite) SetupTest() {
 	var err error
-	suite.tx, err = suite.db.BeginTx(suite.ctx, nil)
+	suite.tx, err = suite.DB.BeginTx(suite.Ctx, nil)
 	suite.Require().NoError(err)
 }
 
@@ -83,12 +34,12 @@ func (suite *personRepoTestSuite) TearDownTest() {
 }
 
 func (suite *personRepoTestSuite) TestGet() {
+	ctx := txcontext.WithTx(suite.Ctx, suite.tx)
+
 	firstName := "John"
 	lastName := "Smith"
 	secondName := "James"
 	birthDate := "2002-07-19"
-
-	ctx := txcontext.WithTx(suite.ctx, suite.tx)
 
 	var personID int
 	stmt := `INSERT INTO persons (first_name, last_name, second_name, birth_date) 
@@ -139,6 +90,8 @@ func (suite *personRepoTestSuite) TestGet() {
 }
 
 func (suite *personRepoTestSuite) TestInsert() {
+	ctx := txcontext.WithTx(suite.Ctx, suite.tx)
+
 	firstName := "John"
 	lastName := "Smith"
 	secondName := "James"
@@ -175,9 +128,9 @@ func (suite *personRepoTestSuite) TestInsert() {
 		Settings:     settings,
 	}
 
-	suite.NoError(suite.repo.Insert(suite.ctx, &person))
+	suite.NoError(suite.repo.Insert(ctx, &person))
 
-	insertedPerson, err := suite.repo.Get(suite.ctx, person.ID)
+	insertedPerson, err := suite.repo.Get(ctx, person.ID)
 	suite.NoError(err)
 	suite.Equal(firstName, insertedPerson.FirstName)
 	suite.Equal(lastName, *insertedPerson.LastName)

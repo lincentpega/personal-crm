@@ -48,17 +48,6 @@ func (m *PersonRepository) Get(ctx context.Context, id int) (*Person, error) {
 }
 
 func (m *PersonRepository) Insert(ctx context.Context, p *Person) error {
-	tx, ok := txcontext.GetTx(ctx)
-	if !ok {
-		var err error
-		tx, err = m.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-		ctx = txcontext.WithTx(ctx, tx)
-	}
-
 	if err := m.insertPerson(ctx, p); err != nil {
 		return err
 	}
@@ -72,10 +61,6 @@ func (m *PersonRepository) Insert(ctx context.Context, p *Person) error {
 	}
 
 	if err := m.insertSettings(ctx, p); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return err
 	}
 
