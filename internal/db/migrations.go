@@ -32,6 +32,8 @@ func ExecMigrations(db *sql.DB, log *log.Logger) error {
 			return nil
 		}
 		return err
+	} else {
+		log.InfoLog.Println("Migrations applied successfully")
 	}
 
 	return nil

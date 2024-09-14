@@ -6,4 +6,5 @@ DROP TABLE IF EXISTS job_infos;
 DROP TABLE IF EXISTS contact_infos;
 DROP TABLE IF EXISTS person_settings;
 DROP TABLE IF EXISTS persons;
+DROP TABLE IF EXISTS sessions;
 COMMIT;

@@ -39,4 +39,10 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 );
 CREATE INDEX idx_notification_status ON public.notifications (status);
 CREATE INDEX idx_notification_person_id ON public.notifications (person_id);
+CREATE TABLE sessions (
+    token TEXT PRIMARY KEY,
+    data BYTEA NOT NULL,
+    expiry TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX sessions_expiry_idx ON sessions (expiry);
 COMMIT;
